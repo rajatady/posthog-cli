@@ -1,9 +1,10 @@
 import { fetch } from 'undici'
 
-import type { Config } from './config'
-import { saveConfig } from './config'
-import { refreshToken } from './oauth'
-import type { HttpMethod, HttpSpec } from './registry'
+import type { Config } from './config.js'
+import { saveConfig } from './config.js'
+import { refreshToken } from './oauth.js'
+import type { HttpMethod, HttpSpec } from './registry.js'
+import { VERSION } from './version.js'
 
 export interface ResolvedRequest {
     method: HttpMethod
@@ -77,7 +78,7 @@ export function resolveRequest(
     const headers: Record<string, string> = {
         Authorization: `Bearer ${cfg.apiKey}`,
         Accept: 'application/json',
-        'User-Agent': 'thehogcli/0.0.1',
+        'User-Agent': `thehogcli/${VERSION}`,
     }
     if (body !== null) headers['Content-Type'] = 'application/json'
 

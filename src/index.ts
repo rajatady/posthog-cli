@@ -2,11 +2,12 @@
 import { Command } from 'commander'
 import kleur from 'kleur'
 
-import { registerHistoryCommands } from './commands/history'
-import { registerLoginCommand } from './commands/login'
-import { registerToolCommand } from './commands/tool'
-import { configureNet } from './lib/net'
-import { loadRegistry } from './lib/registry'
+import { registerHistoryCommands } from './commands/history.js'
+import { registerLoginCommand } from './commands/login.js'
+import { registerToolCommand } from './commands/tool.js'
+import { configureNet } from './lib/net.js'
+import { loadRegistry } from './lib/registry.js'
+import { VERSION } from './lib/version.js'
 
 function main(): void {
     configureNet()
@@ -17,7 +18,7 @@ function main(): void {
         .description(
             `PostHog CLI. ${Object.keys(registry.tools).length} tools across ${Object.keys(registry.modules).length} modules — every call captured in .thehogcli/history.db.\n\nPinned to PostHog @ ${registry.posthogSha.slice(0, 7)}`
         )
-        .version('0.0.1')
+        .version(VERSION)
         .showHelpAfterError()
 
     registerLoginCommand(program)

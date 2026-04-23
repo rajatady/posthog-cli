@@ -1,12 +1,12 @@
 import { Command } from 'commander'
 import kleur from 'kleur'
 
-import { ask, askSecret, readableConfigSnapshot } from '../lib/auth'
-import { configPath, loadConfig, saveConfig } from '../lib/config'
-import { autoDiscover, listProjects } from '../lib/discover'
-import { authorize, registerClient } from '../lib/oauth'
-import { loadRegistry } from '../lib/registry'
-import { deriveAllScopes, deriveReadScopes } from '../lib/scopes'
+import { ask, askSecret, readableConfigSnapshot } from '../lib/auth.js'
+import { configPath, loadConfig, saveConfig } from '../lib/config.js'
+import { autoDiscover, listProjects } from '../lib/discover.js'
+import { authorize, registerClient } from '../lib/oauth.js'
+import { loadRegistry } from '../lib/registry.js'
+import { deriveAllScopes, deriveReadScopes } from '../lib/scopes.js'
 
 const REGION_CHOICES: Record<string, string> = {
     '1': 'https://us.posthog.com',

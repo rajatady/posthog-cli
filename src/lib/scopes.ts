@@ -1,4 +1,4 @@
-import type { Registry } from './registry'
+import type { Registry } from './registry.js'
 
 /**
  * Derive the full scope set thehogcli ever needs as the union of every tool's

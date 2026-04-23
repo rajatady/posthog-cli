@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline/promises'
 
-import type { Config } from './config'
+import type { Config } from './config.js'
 
 /** Prompt for a line of input. Returns trimmed answer, or `fallback` if empty. */
 export async function ask(question: string, fallback?: string): Promise<string> {

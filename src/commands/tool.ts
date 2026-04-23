@@ -4,11 +4,12 @@ import kleur from 'kleur'
 
 import { fetch } from 'undici'
 
-import { executeRequest, redactHeaders, resolveRequest } from '../lib/api'
-import { loadConfig } from '../lib/config'
-import { History, resolveHistoryPath } from '../lib/history'
-import type { RegistryTool } from '../lib/registry'
-import { isDestructive, isUnextractable } from '../lib/registry'
+import { executeRequest, redactHeaders, resolveRequest } from '../lib/api.js'
+import { loadConfig } from '../lib/config.js'
+import { History, resolveHistoryPath } from '../lib/history.js'
+import type { RegistryTool } from '../lib/registry.js'
+import { isDestructive, isUnextractable } from '../lib/registry.js'
+import { VERSION } from '../lib/version.js'
 
 export interface ToolCommandOptions {
     toolName: string
@@ -254,7 +255,7 @@ async function runHandwritten(
         Authorization: `Bearer ${cfg.apiKey}`,
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        'User-Agent': 'thehogcli/0.0.1',
+        'User-Agent': `thehogcli/${VERSION}`,
     }
     const body = JSON.stringify({ args })
 

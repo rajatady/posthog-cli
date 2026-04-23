@@ -1,24 +1,45 @@
 {
   "name": "thehogcli",
-  "version": "0.0.1",
-  "description": "A PostHog CLI that mirrors the PostHog MCP tool surface without the 250k-token schema overhead. Every call is captured locally in .thehogcli/history.db and re-runnable by id.",
+  "version": "1.0.0",
+  "description": "A PostHog CLI that mirrors the PostHog MCP tool surface without the ~250k-token schema overhead. OAuth login with scopes derived from the registry. Every call is captured locally in .thehogcli/history.db with a required --why annotation and re-runnable by id.",
+  "keywords": [
+    "posthog",
+    "cli",
+    "mcp",
+    "analytics",
+    "hogql",
+    "feature-flags",
+    "claude-code",
+    "agent"
+  ],
+  "author": "Kumar Divya Rajat <rajat.ady@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rajatady/posthog-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/rajatady/posthog-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rajatady/posthog-cli/issues"
+  },
   "bin": {
     "thehogcli": "dist/index.js"
   },
   "files": [
     "dist/",
-    "src/registry.json",
-    "thehogcli.skill.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build:extract": "tsx build/extract.ts",
-    "build:ts": "tsc -p tsconfig.json",
+    "build:ts": "tsc -p tsconfig.build.json",
     "build": "npm run build:extract && npm run build:ts",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "sync:posthog": "bash scripts/sync-posthog.sh"
+    "sync:posthog": "bash scripts/sync-posthog.sh",
+    "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
     "node": ">=20"

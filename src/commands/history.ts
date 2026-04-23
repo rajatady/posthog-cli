@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import kleur from 'kleur'
 
-import { History, formatRelativeTime, resolveHistoryPath } from '../lib/history'
+import { History, formatRelativeTime, resolveHistoryPath } from '../lib/history.js'
 
 export function registerHistoryCommands(program: Command): void {
     const history = program
