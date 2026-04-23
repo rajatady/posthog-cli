@@ -353,34 +353,44 @@ If `tests/extractor.test.ts` fails after a sync, PostHog changed the generator t
 
 ## 10. Releasing a new version
 
+Releases are **tag-driven and run in CI**. No local `npm publish`. The `.github/workflows/release.yml` workflow triggers on any `v*` tag push, runs `sync:posthog` → `npm ci` → `prepublishOnly` (build + test) → `npm publish --provenance --access public` → creates the GitHub release. Authentication is via npm **Trusted Publishing** (OIDC): GitHub Actions mints a short-lived id-token, npm verifies the `repository` + `workflow` claims match the trusted-publisher config on npmjs.com, and issues a scoped publish token for that one job. No `NPM_TOKEN` secret exists.
+
 ```bash
-# 1. Bump version in three places (kept in sync by tests/version.test.ts):
+# 1. Bump version in two places (kept in sync by tests/version.test.ts):
 #    - package.json                "version": "1.x.y"
 #    - src/lib/version.ts          export const VERSION = '1.x.y'
-#    (CHANGELOG.md if it exists)
 
-# 2. Run the full suite locally:
-rm -rf dist *.tgz
-npm run build
+# 2. Sanity-check locally before tagging:
 npm test
 npm pack --dry-run    # confirm tarball shape
 
-# 3. Publish:
-npm publish           # prepublishOnly re-runs build + test
-
-# 4. Tag and push:
+# 3. Commit the bump, tag, push:
+git commit -am "chore(release): bump to 1.x.y"
+git push
 git tag v1.x.y
-git push origin main --tags
-gh release create v1.x.y --generate-notes
+git push origin v1.x.y
+
+# 4. Watch the release workflow:
+gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-`prepublishOnly` is the guardrail — if tests fail or the build breaks, publish aborts.
+End-to-end release time: ~60 s on GitHub's runners (the blobless PostHog clone is 20-30 s of that).
+
+Guardrails that fail the publish:
+- `prepublishOnly` runs the full `npm run build && npm test` inside the workflow — any red test aborts before `npm publish` is reached.
+- `tests/version.test.ts` pins `VERSION` to `package.json.version` — forgetting one of the two bumps fails CI.
+- Trusted Publishing verifies that the publishing job is running from `rajatady/posthog-cli` on the configured workflow file. A publish attempt from anywhere else is rejected by npm.
+- npm rejects re-publishing an already-published version — if a tag's version duplicates an existing npm release, bump the patch and retag.
+
+First-time setup of the publisher (already done for this repo, here for reference): on npmjs.com go to the package's "Trusted Publisher" settings and add **GitHub Actions**, org `rajatady`, repo `posthog-cli`, workflow filename `release.yml`. For a package that does not yet exist on npm, npm allows configuring a *pending* trusted publisher that activates on the first publish.
 
 ---
 
 ## 11. Testing
 
-35 vitest cases currently. Overall line coverage ~22%. The coverage is uneven by design:
+**Coverage gate: 95%.** `vitest.config.ts` declares `thresholds: { lines: 95, functions: 95, branches: 95, statements: 95 }`. The CI workflow (`.github/workflows/ci.yml`) runs `npx vitest run --coverage` on every PR and push to `main`. Any metric below 95% fails the job, which blocks merges. The threshold is not negotiable — do not lower it to get a PR to pass. Write the tests.
+
+35 vitest cases currently. The coverage is uneven by design:
 
 | Area                        | Line coverage | Validated by |
 |-----------------------------|--------------|--------------|
@@ -399,11 +409,12 @@ The untested modules are the network/credentials/state-machine paths. Before lan
 
 **`tests/cli-registration.test.ts` is the load-bearing regression guard.** It iterates every tool in the registry and asserts `registerToolCommand` does not throw. This catches classes of bugs the extractor cannot see — e.g., a new PostHog handwritten tool that declares a `projectId` property would collide with the CLI's reserved `--project-id` and fail at commander registration. The test surfaces this at commit time, not at user runtime.
 
-Running coverage:
+Running coverage locally:
 ```bash
-npm install --no-save @vitest/coverage-v8
 npx vitest run --coverage
 ```
+
+The threshold is enforced in `vitest.config.ts`, so local and CI runs fail the same way on a regression.
 
 ---
 
