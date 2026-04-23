@@ -8,10 +8,18 @@ import { VERSION } from '../lib/version.js'
 
 const GITHUB_ISSUES_URL = 'https://github.com/rajatady/posthog-cli/issues/new'
 
+// Fields deliberately excluded from the public report:
+//   params        — may contain query payloads, filter values, user-supplied strings
+//   responsePreview — may contain PII from API responses (emails, names, event data)
+//   projectId     — numeric internal ID; not needed to reproduce a CLI bug
+//   apiKey        — never in config.ts's return value, but belt-and-suspenders
+
 export function registerReportBugCommand(parent: Command): Command {
     const cmd = parent
         .command('report-bug')
-        .description('Open a pre-filled GitHub issue with CLI session context for bug reproduction.')
+        .description(
+            'Open a pre-filled GitHub issue with sanitised CLI context (no params, no response data).'
+        )
         .option('--id <prefix>', 'Attach a specific history entry (prefix or full UUID).')
         .option('--last <n>', 'Attach the last N history entries (default: 5).', '5')
         .option('--title <text>', 'Issue title (pre-fills the GitHub form).')
@@ -56,12 +64,14 @@ function reportBug(opts: { id?: string; last?: string; title?: string }): void {
         platform: process.platform,
         nodeVersion: process.version,
         host: cfg.host,
-        projectId: cfg.projectId ?? '@current',
         historyLines,
     })
 
     const url = `${GITHUB_ISSUES_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
 
+    console.error(kleur.yellow(
+        '⚠  Review the issue form before submitting — remove anything sensitive before posting.'
+    ))
     console.error(kleur.dim('Opening GitHub issue form in your browser…'))
     console.error(kleur.dim(`If it does not open: ${url}`))
 
@@ -73,12 +83,16 @@ interface BodyContext {
     platform: string
     nodeVersion: string
     host: string
-    projectId: string
     historyLines: string[]
 }
 
 function buildBody(ctx: BodyContext): string {
-    return `## Environment
+    return `<!-- ⚠️ STOP — before submitting, check this form for sensitive data.
+     Remove any API keys, personal information, query contents, or response
+     payloads that may have been added manually. params and response data
+     are intentionally excluded by the CLI. -->
+
+## Environment
 
 | Key | Value |
 |-----|-------|
@@ -86,7 +100,6 @@ function buildBody(ctx: BodyContext): string {
 | OS | \`${ctx.platform}\` |
 | Node | \`${ctx.nodeVersion}\` |
 | Host | \`${ctx.host}\` |
-| Project | \`${ctx.projectId}\` |
 
 ## What happened?
 
@@ -98,16 +111,16 @@ function buildBody(ctx: BodyContext): string {
 
 ## Steps to reproduce
 
-[FILL IN: exact command(s) to reproduce]
+[FILL IN: exact command(s) to reproduce — do not paste API keys or query data]
 
 \`\`\`bash
 thehogcli [FILL IN command]
 \`\`\`
 
-## CLI session replay (last calls)
+## CLI history (tool names, exit codes, timings — no params or response data)
 
 <details>
-<summary>History entries</summary>
+<summary>Recent calls</summary>
 
 \`\`\`
 ${ctx.historyLines.join('\n\n')}
@@ -121,16 +134,17 @@ ${ctx.historyLines.join('\n\n')}
 `
 }
 
+// Only safe, non-PII fields are included.
+// params and responsePreview are intentionally omitted — they can contain
+// user-supplied query payloads, filter values, or API response data.
 function formatEntry(e: {
     id: string
     createdAt: number
     module: string
     tool: string
     description: string
-    params: Record<string, unknown>
     method: string | null
     path: string | null
-    responsePreview: string | null
     exitCode: number
     durationMs: number
 }): string {
@@ -139,18 +153,8 @@ function formatEntry(e: {
     const lines = [
         `[${e.id.slice(0, 8)}] ${ts}  ${status}  ${e.durationMs}ms`,
         `  tool:    ${e.module} / ${e.tool}`,
-        `  why:     ${e.description}`,
     ]
     if (e.method && e.path) lines.push(`  request: ${e.method} ${e.path}`)
-    if (Object.keys(e.params).length > 0) {
-        lines.push(`  params:  ${JSON.stringify(e.params)}`)
-    }
-    if (e.responsePreview) {
-        const preview = e.responsePreview.length > 300
-            ? `${e.responsePreview.slice(0, 300)}…`
-            : e.responsePreview
-        lines.push(`  preview: ${preview}`)
-    }
     return lines.join('\n')
 }
 

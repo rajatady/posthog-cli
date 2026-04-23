@@ -29,7 +29,7 @@ function baseConfig() {
     }
 }
 
-function makeEntry(overrides = {}) {
+function makeEntry(overrides: Record<string, unknown> = {}) {
     return {
         id: 'aaaabbbb-1234-5678-9abc-def012345678',
         createdAt: Date.parse('2026-01-01T10:00:00Z'),
@@ -66,6 +66,11 @@ async function runCmd(args: string[]): Promise<{ stdout: string[]; stderr: strin
     return { stdout: logged, stderr: errors }
 }
 
+function extractUrl(): string {
+    const args = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
+    return args[args.length - 1]!
+}
+
 describe('report-bug', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -74,29 +79,66 @@ describe('report-bug', () => {
     })
 
     it('opens browser with pre-filled URL containing version and host', async () => {
-        const mockList = vi.fn().mockReturnValue([makeEntry()])
-        MockHistory.mockImplementation(() => ({ list: mockList, get: vi.fn() }))
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([makeEntry()]), get: vi.fn() }))
 
         const { stderr } = await runCmd(['report-bug', '--title', 'my bug'])
 
         expect(mockSpawn).toHaveBeenCalledOnce()
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        const fullUrl = url[url.length - 1]!
-        expect(fullUrl).toContain('github.com/rajatady/posthog-cli/issues/new')
-        expect(fullUrl).toContain(encodeURIComponent('my bug'))
-        expect(fullUrl).toContain(encodeURIComponent('feature-flag-get-all'))
+        const url = extractUrl()
+        expect(url).toContain('github.com/rajatady/posthog-cli/issues/new')
+        expect(url).toContain(encodeURIComponent('my bug'))
+        expect(url).toContain(encodeURIComponent('feature-flag-get-all'))
         expect(stderr.join(' ')).toContain('Opening GitHub issue form')
     })
 
-    it('uses @current when projectId is null', async () => {
-        mockLoadConfig.mockReturnValue({ ...baseConfig(), projectId: null })
+    it('emits a privacy warning before opening the browser', async () => {
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
+
+        const { stderr } = await runCmd(['report-bug'])
+
+        expect(stderr.join(' ')).toContain('Review the issue form before submitting')
+    })
+
+    it('does not include params in the issue body', async () => {
+        const entry = makeEntry({ params: { secretQuery: 'SELECT * FROM users' } })
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([entry]), get: vi.fn() }))
+
+        await runCmd(['report-bug'])
+
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).not.toContain('secretQuery')
+        expect(body).not.toContain('SELECT')
+    })
+
+    it('does not include responsePreview in the issue body', async () => {
+        const entry = makeEntry({ responsePreview: '{"email":"user@example.com"}' })
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([entry]), get: vi.fn() }))
+
+        await runCmd(['report-bug'])
+
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).not.toContain('user@example.com')
+        expect(body).not.toContain('responsePreview')
+    })
+
+    it('includes a stop-and-check comment in the issue body', async () => {
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        const fullUrl = url[url.length - 1]!
-        expect(fullUrl).toContain(encodeURIComponent('@current'))
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).toContain('STOP')
+        expect(body).toContain('sensitive data')
+    })
+
+    it('does not include projectId in the issue body', async () => {
+        mockLoadConfig.mockReturnValue({ ...baseConfig(), projectId: '99999' })
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
+
+        await runCmd(['report-bug'])
+
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).not.toContain('99999')
     })
 
     it('uses --last N to fetch N history entries', async () => {
@@ -113,9 +155,7 @@ describe('report-bug', () => {
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        const fullUrl = url[url.length - 1]!
-        expect(decodeURIComponent(fullUrl)).toContain('no history entries found')
+        expect(decodeURIComponent(extractUrl())).toContain('no history entries found')
     })
 
     it('attaches specific entry when --id is provided', async () => {
@@ -126,8 +166,7 @@ describe('report-bug', () => {
         await runCmd(['report-bug', '--id', 'aaaabbbb'])
 
         expect(mockGet).toHaveBeenCalledWith('aaaabbbb')
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        expect(url[url.length - 1]).toContain(encodeURIComponent('feature-flag-get-all'))
+        expect(extractUrl()).toContain(encodeURIComponent('feature-flag-get-all'))
     })
 
     it('prints error and sets exitCode 1 when --id entry not found', async () => {
@@ -144,8 +183,7 @@ describe('report-bug', () => {
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        expect(decodeURIComponent(url[url.length - 1]!)).toContain('history unavailable')
+        expect(decodeURIComponent(extractUrl())).toContain('history unavailable')
     })
 
     it('includes default title placeholder when --title is not provided', async () => {
@@ -153,9 +191,7 @@ describe('report-bug', () => {
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        const fullUrl = url[url.length - 1]!
-        expect(decodeURIComponent(fullUrl)).toContain('[FILL IN: one-line description of the bug]')
+        expect(decodeURIComponent(extractUrl())).toContain('[FILL IN: one-line description of the bug]')
     })
 
     it('shows exit code for failed entries', async () => {
@@ -164,72 +200,56 @@ describe('report-bug', () => {
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        expect(decodeURIComponent(url[url.length - 1]!)).toContain('exit 1')
+        expect(decodeURIComponent(extractUrl())).toContain('exit 1')
     })
 
     it('formats entry without method/path gracefully', async () => {
-        const entry = makeEntry({ method: null, path: null, params: {}, responsePreview: null })
+        const entry = makeEntry({ method: null, path: null })
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([entry]), get: vi.fn() }))
 
         await runCmd(['report-bug'])
 
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        // should not throw and URL should still be valid
-        expect(url[url.length - 1]).toContain('github.com')
-    })
-
-    it('truncates long response previews in the issue body', async () => {
-        const longPreview = 'x'.repeat(500)
-        const entry = makeEntry({ responsePreview: longPreview })
-        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([entry]), get: vi.fn() }))
-
-        await runCmd(['report-bug'])
-
-        const url = (mockSpawn.mock.calls[0] as unknown[])[1] as string[]
-        const body = decodeURIComponent(url[url.length - 1]!.split('body=')[1]!)
-        // preview in body must be ≤ 300 chars + ellipsis, not the full 500
-        expect(body).not.toContain('x'.repeat(400))
+        expect(extractUrl()).toContain('github.com')
     })
 
     it('silently continues when spawnSync throws', async () => {
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
         mockSpawn.mockImplementationOnce(() => { throw new Error('no open binary') })
 
-        // Should not throw
         await runCmd(['report-bug'])
+        // no throw
     })
 
     it('uses darwin open command on macOS', async () => {
-        const originalPlatform = process.platform
+        const orig = process.platform
         Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
 
         await runCmd(['report-bug'])
 
         expect((mockSpawn.mock.calls[0] as unknown[])[0]).toBe('open')
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+        Object.defineProperty(process, 'platform', { value: orig, configurable: true })
     })
 
     it('uses xdg-open on linux', async () => {
-        const originalPlatform = process.platform
+        const orig = process.platform
         Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
 
         await runCmd(['report-bug'])
 
         expect((mockSpawn.mock.calls[0] as unknown[])[0]).toBe('xdg-open')
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+        Object.defineProperty(process, 'platform', { value: orig, configurable: true })
     })
 
     it('uses cmd /C start on windows', async () => {
-        const originalPlatform = process.platform
+        const orig = process.platform
         Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
         MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
 
         await runCmd(['report-bug'])
 
         expect((mockSpawn.mock.calls[0] as unknown[])[0]).toBe('cmd')
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+        Object.defineProperty(process, 'platform', { value: orig, configurable: true })
     })
 })
