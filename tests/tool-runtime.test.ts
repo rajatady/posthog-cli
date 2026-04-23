@@ -450,6 +450,57 @@ describe('runHandwritten – DIRECT_ENDPOINTS (query-run)', () => {
         const body = JSON.parse(init.body)
         expect(body.query).toEqual({ kind: 'HogQLQuery', query: 'SELECT 1' })
     })
+
+    it('unwraps ActorsQuery to its inner source transparently', async () => {
+        const queryRunTool: RegistryTool = {
+            module: 'insights-and-analytics', category: 'Insights & analytics',
+            title: 'Run query', description: 'Run a query', scopes: ['query:read'],
+            annotations: {}, http: null, inputs: { properties: { query: {} }, required: ['query'] },
+        }
+        mockFetch.mockResolvedValueOnce({
+            status: 200,
+            text: async () => JSON.stringify({ results: [['abc-person-id']] }),
+        })
+        const errLogs: string[] = []
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation((...a) => errLogs.push(String(a[0])))
+        const cmd = makeCmd('query-run', queryRunTool)
+        const actorsQuery = JSON.stringify({
+            kind: 'ActorsQuery',
+            source: { kind: 'HogQLQuery', query: 'SELECT DISTINCT person_id FROM events' },
+        })
+        await parse(cmd, ['query-run', '--why', 'test', '--query', actorsQuery])
+        const [, init] = mockFetch.mock.calls[0] as [string, { body: string }]
+        const sent = JSON.parse(init.body)
+        // Inner HogQLQuery is sent, not the ActorsQuery wrapper
+        expect(sent.query.kind).toBe('HogQLQuery')
+        expect(sent.query).not.toHaveProperty('source')
+        // User is informed about the unwrap
+        expect(errLogs.some(l => l.includes('ActorsQuery'))).toBe(true)
+    })
+
+    it('unwraps PersonsQuery to its inner source transparently', async () => {
+        const queryRunTool: RegistryTool = {
+            module: 'insights-and-analytics', category: 'Insights & analytics',
+            title: 'Run query', description: 'Run a query', scopes: ['query:read'],
+            annotations: {}, http: null, inputs: { properties: { query: {} }, required: ['query'] },
+        }
+        mockFetch.mockResolvedValueOnce({
+            status: 200,
+            text: async () => JSON.stringify({ results: [] }),
+        })
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const cmd = makeCmd('query-run', queryRunTool)
+        const personsQuery = JSON.stringify({
+            kind: 'PersonsQuery',
+            source: { kind: 'HogQLQuery', query: 'SELECT person_id FROM events' },
+        })
+        await parse(cmd, ['query-run', '--why', 'test', '--query', personsQuery])
+        const [, init] = mockFetch.mock.calls[0] as [string, { body: string }]
+        const sent = JSON.parse(init.body)
+        expect(sent.query.kind).toBe('HogQLQuery')
+    })
 })
 
 describe('runHandwritten – 4xx response', () => {
@@ -489,6 +540,24 @@ describe('runHandwritten – 4xx response', () => {
         const cmd = makeCmd('execute-sql', handwrittenTool)
         await parse(cmd, ['execute-sql', '--why', 'test', '--query', 'SELECT 1'])
         expect(process.exitCode).toBeFalsy()
+    })
+
+    it('prints OAuth re-login hint when PostHog rejects Personal API Key', async () => {
+        mockFetch.mockResolvedValueOnce({
+            status: 403,
+            text: async () => JSON.stringify({
+                type: 'authentication_error',
+                code: 'permission_denied',
+                detail: 'This action does not support Personal API Key access',
+            }),
+        })
+        const errLogs: string[] = []
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation((...args) => { errLogs.push(String(args[0])) })
+        const cmd = makeCmd('execute-sql', handwrittenTool)
+        await parse(cmd, ['execute-sql', '--why', 'test', '--query', 'SELECT 1'])
+        expect(process.exitCode).toBe(1)
+        expect(errLogs.some(l => l.includes('OAuth') || l.includes('thehogcli login'))).toBe(true)
     })
 })
 

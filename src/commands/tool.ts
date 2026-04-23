@@ -243,9 +243,24 @@ const DIRECT_ENDPOINTS: Record<string, {
     // The MCP wrapper for query-run is session-cookie-only; the direct query
     // endpoint accepts Bearer tokens. The direct endpoint wraps the query
     // object under a top-level "query" key: { "query": <QuerySchema> }.
+    //
+    // ActorsQuery / PersonsQuery resolve person-level data and are blocked for
+    // API key access by PostHog's permission layer. When detected, we unwrap
+    // to the inner `source` query transparently — the `source` is a regular
+    // HogQLQuery that returns the same person_id rows without the persons wrapper.
     'query-run': {
         path: '/api/projects/{project_id}/query/',
-        body: (args) => ({ query: args.query ?? args }),
+        body: (args) => {
+            const q = (args.query ?? args) as Record<string, unknown>
+            const unwrappable = new Set(['ActorsQuery', 'PersonsQuery'])
+            if (q && typeof q === 'object' && unwrappable.has(q.kind as string) && q.source) {
+                console.error(kleur.dim(
+                    `ℹ  ${q.kind} is session-only; using inner source query instead.`
+                ))
+                return { query: q.source }
+            }
+            return { query: q }
+        },
     },
 }
 
@@ -304,11 +319,26 @@ async function runHandwritten(
     }
     if (rawOpts.json) console.log(JSON.stringify(parsed, null, 2))
     else printHandwrittenResult(res.status, parsed)
+    if (isPatRejection(parsed)) {
+        console.error(kleur.yellow(
+            `  ↳ This tool requires an OAuth session token, not a Personal API Key.\n` +
+            `     Re-authenticate with \`thehogcli login\` (browser OAuth flow, not --manual).`
+        ))
+    }
     return {
         status: res.status,
         responsePreview: previewOf(parsed),
         exitCode: res.status >= 400 ? 1 : 0,
     }
+}
+
+function isPatRejection(body: unknown): boolean {
+    if (!body || typeof body !== 'object') return false
+    const b = body as Record<string, unknown>
+    return (
+        typeof b.detail === 'string' &&
+        b.detail.toLowerCase().includes('personal api key')
+    )
 }
 
 function parseArgs(raw: string | undefined): Record<string, unknown> {
