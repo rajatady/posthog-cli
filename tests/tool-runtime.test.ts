@@ -407,6 +407,51 @@ describe('printResult – string body', () => {
     })
 })
 
+describe('runHandwritten – DIRECT_ENDPOINTS (query-run)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        tmpDir = mkdtempSync(join(tmpdir(), 'thehogcli-test-'))
+        process.env.THEHOGCLI_HISTORY_DB = join(tmpDir, 'test.db')
+        mockLoadConfig.mockReturnValue(fakeConfig)
+    })
+    afterEach(() => {
+        delete process.env.THEHOGCLI_HISTORY_DB
+        rmSync(tmpDir, { recursive: true, force: true })
+        process.exitCode = 0
+    })
+
+    it('routes query-run to direct /query/ endpoint, not mcp_tools wrapper', async () => {
+        const queryRunTool: RegistryTool = {
+            module: 'insights-and-analytics',
+            category: 'Insights & analytics',
+            title: 'Run query',
+            description: 'Run a HogQL or trends query',
+            scopes: ['query:read'],
+            annotations: {},
+            http: null,
+            inputs: { properties: { query: {} }, required: ['query'] },
+        }
+        mockFetch.mockResolvedValueOnce({
+            status: 200,
+            text: async () => JSON.stringify({ results: [[42]] }),
+        })
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        const cmd = makeCmd('query-run', queryRunTool)
+        await parse(cmd, [
+            'query-run', '--why', 'test',
+            '--query', '{"kind":"HogQLQuery","query":"SELECT 1"}',
+        ])
+        expect(mockFetch).toHaveBeenCalledOnce()
+        const [url, init] = mockFetch.mock.calls[0] as [string, { body: string }]
+        expect(url).toContain('/api/projects/')
+        expect(url).toContain('/query/')
+        expect(url).not.toContain('mcp_tools')
+        const body = JSON.parse(init.body)
+        expect(body.query).toEqual({ kind: 'HogQLQuery', query: 'SELECT 1' })
+    })
+})
+
 describe('runHandwritten – 4xx response', () => {
     beforeEach(() => {
         vi.clearAllMocks()

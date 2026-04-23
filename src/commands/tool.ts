@@ -233,12 +233,31 @@ async function runStandard(
     }
 }
 
+// Tools whose MCP-wrapper endpoint (/api/environments/.../mcp_tools/...) rejects
+// Bearer tokens (session-cookie-only). Map each to its direct REST path and a
+// function that extracts the request body from the resolved args.
+const DIRECT_ENDPOINTS: Record<string, {
+    path: string
+    body: (args: Record<string, unknown>) => unknown
+}> = {
+    // The MCP wrapper for query-run is session-cookie-only; the direct query
+    // endpoint accepts Bearer tokens. The direct endpoint wraps the query
+    // object under a top-level "query" key: { "query": <QuerySchema> }.
+    'query-run': {
+        path: '/api/projects/{project_id}/query/',
+        body: (args) => ({ query: args.query ?? args }),
+    },
+}
+
 /**
  * Invoke a handwritten v1 tool via PostHog's universal MCP-tool endpoint:
  *   POST /api/environments/{project_id}/mcp_tools/{tool_name_snake}/
  *   Body: { "args": { ... } }
  * The backend (posthog/products/posthog_ai/backend/api/mcp_tools.py) resolves
  * the tool name in mcp_tool_registry and runs it with the user's credentials.
+ *
+ * Exception: tools in DIRECT_ENDPOINTS bypass the wrapper and call the REST
+ * endpoint directly (Bearer-token-compatible).
  */
 async function runHandwritten(
     toolName: string,
@@ -250,14 +269,19 @@ async function runHandwritten(
         throw new Error('Missing API key. Run `thehogcli login`.')
     }
     const project = cfg.projectId ?? '@current'
-    const url = `${cfg.host.replace(/\/$/, '')}/api/environments/${encodeURIComponent(project)}/mcp_tools/${toSnake(toolName)}/`
+    const base = cfg.host.replace(/\/$/, '')
+
+    const direct = DIRECT_ENDPOINTS[toolName]
+    const url = direct
+        ? `${base}${direct.path.replace('{project_id}', encodeURIComponent(project))}`
+        : `${base}/api/environments/${encodeURIComponent(project)}/mcp_tools/${toSnake(toolName)}/`
     const headers = {
         Authorization: `Bearer ${cfg.apiKey}`,
         Accept: 'application/json',
         'Content-Type': 'application/json',
         'User-Agent': `thehogcli/${VERSION}`,
     }
-    const body = JSON.stringify({ args })
+    const body = direct ? JSON.stringify(direct.body(args)) : JSON.stringify({ args })
 
     if (rawOpts.dryRun) {
         console.log(kleur.cyan('DRY RUN — not sending:'))
