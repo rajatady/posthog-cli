@@ -4,6 +4,7 @@ import kleur from 'kleur'
 
 import { registerHistoryCommands } from './commands/history.js'
 import { registerLoginCommand } from './commands/login.js'
+import { registerReportBugCommand } from './commands/report-bug.js'
 import { registerToolCommand } from './commands/tool.js'
 import { configureNet } from './lib/net.js'
 import { loadRegistry } from './lib/registry.js'
@@ -23,6 +24,7 @@ function main(): void {
 
     registerLoginCommand(program)
     registerHistoryCommands(program)
+    registerReportBugCommand(program)
 
     const moduleSlugs = Object.keys(registry.modules).sort()
     for (const slug of moduleSlugs) {
