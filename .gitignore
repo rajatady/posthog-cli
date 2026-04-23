@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.thehogcli/
+*.log
+.DS_Store
+coverage/
+
+# IDE
+.idea/
+.vscode/
+
+# PostHog monorepo (pinned by POSTHOG_SHA + scripts/sync-posthog.sh)
+# Dev + CI only; never shipped. Convert to real git submodule once pin is stable.
+posthog/
