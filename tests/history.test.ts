@@ -1,9 +1,9 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 
-import { History, formatRelativeTime } from '../src/lib/history'
+import { History, formatRelativeTime, defaultHistoryPath, resolveHistoryPath } from '../src/lib/history'
 
 function freshDbPath(): string {
     const dir = mkdtempSync(join(tmpdir(), 'thehogcli-test-'))
@@ -44,6 +44,15 @@ describe('formatRelativeTime', () => {
 })
 
 describe('History', () => {
+    it('creates parent directory recursively when it does not exist', () => {
+        const outer = mkdtempSync(join(tmpdir(), 'thehogcli-mkdir-outer-'))
+        rmSync(outer, { recursive: true })
+        const dbPath = join(outer, 'nested', 'history.db')
+        const h = new History(dbPath)
+        expect(h.count()).toBe(0)
+        rmSync(outer, { recursive: true, force: true })
+    })
+
     it('round-trips insert → list → get', () => {
         const h = new History(freshDbPath())
 
@@ -99,6 +108,14 @@ describe('History', () => {
         expect(second.map((e) => e.id)).toEqual(['id-2', 'id-1'])
     })
 
+    it('round-trips null method and path', () => {
+        const h = new History(freshDbPath())
+        h.insert(mk({ id: 'null-http', method: null, path: null }))
+        const row = h.get('null-http')
+        expect(row?.method).toBeNull()
+        expect(row?.path).toBeNull()
+    })
+
     it('filters by module and tool', () => {
         const h = new History(freshDbPath())
         h.insert(mk({ id: 'a', module: 'feature-flags', tool: 'feature-flag-get-all' }))
@@ -107,6 +124,47 @@ describe('History', () => {
 
         expect(h.list({ module: 'feature-flags' }).map((e) => e.id).sort()).toEqual(['a', 'c'])
         expect(h.list({ tool: 'dashboard-get' }).map((e) => e.id)).toEqual(['b'])
+    })
+})
+
+describe('defaultHistoryPath', () => {
+    it('returns a path ending in .thehogcli/history.db relative to cwd', () => {
+        const p = defaultHistoryPath('/tmp/myproject')
+        expect(p).toBe('/tmp/myproject/.thehogcli/history.db')
+    })
+
+    it('uses process.cwd() as default', () => {
+        const p = defaultHistoryPath()
+        expect(p).toContain('.thehogcli/history.db')
+        expect(p.startsWith('/')).toBe(true)
+    })
+})
+
+describe('resolveHistoryPath', () => {
+    it('returns explicit path when provided', () => {
+        expect(resolveHistoryPath('/explicit/path.db')).toBe('/explicit/path.db')
+    })
+
+    it('returns THEHOGCLI_HISTORY_DB env var when set', () => {
+        const prev = process.env.THEHOGCLI_HISTORY_DB
+        process.env.THEHOGCLI_HISTORY_DB = '/env/path.db'
+        try {
+            expect(resolveHistoryPath()).toBe('/env/path.db')
+        } finally {
+            if (prev === undefined) delete process.env.THEHOGCLI_HISTORY_DB
+            else process.env.THEHOGCLI_HISTORY_DB = prev
+        }
+    })
+
+    it('falls back to defaultHistoryPath when no explicit or env', () => {
+        const prev = process.env.THEHOGCLI_HISTORY_DB
+        delete process.env.THEHOGCLI_HISTORY_DB
+        try {
+            const p = resolveHistoryPath()
+            expect(p).toContain('.thehogcli/history.db')
+        } finally {
+            if (prev !== undefined) process.env.THEHOGCLI_HISTORY_DB = prev
+        }
     })
 })
 

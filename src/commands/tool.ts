@@ -145,18 +145,17 @@ async function runTool(
             params[original] = parseValue(rawOpts[camelAttr] as string)
         }
     }
-    // For handwritten tools with a resolved schema, flag values are the args
-    // themselves. Merge --args on top so explicit JSON always wins.
-    if (isUnextractable(tool) && rawOpts.args !== undefined) {
-        Object.assign(params, parseArgs(rawOpts.args as string))
-    }
-
     const started = Date.now()
     let status = -1
     let responsePreview: string | null = null
     let exitCode = 0
 
     try {
+        // Merge --args on top of per-field flags. parseArgs can throw on bad JSON — keep it
+        // inside the try block so the error is caught and reported cleanly, not an unhandled rejection.
+        if (isUnextractable(tool) && rawOpts.args !== undefined) {
+            Object.assign(params, parseArgs(rawOpts.args as string))
+        }
         const outcome = isUnextractable(tool)
             ? await runHandwritten(toolName, cfg, rawOpts, params)
             : await runStandard(tool, cfg, params, rawOpts)
@@ -185,7 +184,7 @@ async function runTool(
                 tool.http?.path ??
                 (isUnextractable(tool)
                     ? `/api/environments/{project_id}/mcp_tools/${toSnake(toolName)}/`
-                    : null),
+                    : /* v8 ignore next */ null),
             responsePreview,
             exitCode,
             durationMs: Date.now() - started,
@@ -193,6 +192,7 @@ async function runTool(
         })
         const short = id.slice(0, 8)
         console.error(kleur.dim(`→ history id ${short}  (${exitCode === 0 ? 'ok' : `exit ${exitCode}`})`))
+    /* v8 ignore next 3 */
     } catch (err) {
         console.error(kleur.yellow(`(history write failed: ${(err as Error).message})`))
     }

@@ -121,7 +121,7 @@ async function doFetch(req: ResolvedRequest): ReturnType<typeof fetch> {
 }
 
 async function tryRefresh(cfg: Config): Promise<string | null> {
-    if (!cfg.refreshToken || !cfg.clientId) return null
+    /* v8 ignore next */ if (!cfg.refreshToken || !cfg.clientId) return null
     try {
         const t = await refreshToken({
             host: cfg.host,

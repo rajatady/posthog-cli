@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { loadRegistry } from '../src/lib/registry'
+import { loadRegistry, getTool } from '../src/lib/registry'
 import { deriveAllScopes, deriveReadScopes } from '../src/lib/scopes'
 
 /**
@@ -9,6 +9,20 @@ import { deriveAllScopes, deriveReadScopes } from '../src/lib/scopes'
  *  - a registry regeneration that accidentally drops scopes surfaces immediately
  *  - a scope typo (e.g. 'feature_flag:red') doesn't silently leak into a release
  */
+describe('getTool', () => {
+    const registry = loadRegistry()
+
+    it('returns the tool entry for a known tool name', () => {
+        const tool = getTool(registry, 'feature-flag-get-all')
+        expect(tool).toBeDefined()
+        expect(tool?.module).toBe('feature-flags')
+    })
+
+    it('returns undefined for an unknown tool name', () => {
+        expect(getTool(registry, 'nonexistent-tool-xyz')).toBeUndefined()
+    })
+})
+
 describe('deriveAllScopes', () => {
     const registry = loadRegistry()
     const all = deriveAllScopes(registry)

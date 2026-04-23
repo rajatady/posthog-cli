@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
@@ -10,6 +10,7 @@ import {
     extractQueryParams,
     extractBodyParams,
     moduleSlug,
+    build,
 } from '../build/extract'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -163,5 +164,54 @@ describe('parseGeneratedToolFile (integration on real MCP fixture shape)', () =>
         expect(s.pathParams).toEqual(['id'])
         expect(s.bodyParams).toEqual([])
         expect(s.queryParams).toEqual([])
+    })
+})
+
+const POSTHOG_PRESENT = existsSync(join(dirname(fileURLToPath(import.meta.url)), '../posthog/services/mcp/schema/tool-definitions-all.json'))
+
+describe.skipIf(!POSTHOG_PRESENT)('build() pipeline integration (requires posthog/ clone)', () => {
+    it('produces a registry with 262 tools', () => {
+        const registry = build()
+        expect(Object.keys(registry.tools).length).toBe(262)
+    })
+
+    it('all tools have module, title, scopes', () => {
+        const registry = build()
+        for (const [name, tool] of Object.entries(registry.tools)) {
+            expect(tool.module, `${name}.module`).toBeTruthy()
+            expect(tool.title, `${name}.title`).toBeTruthy()
+            expect(Array.isArray(tool.scopes), `${name}.scopes`).toBe(true)
+        }
+    })
+
+    it('every tool in each module maps back to an existing tool entry', () => {
+        const registry = build()
+        for (const [slug, mod] of Object.entries(registry.modules)) {
+            for (const toolName of mod.tools) {
+                expect(registry.tools[toolName], `${slug}/${toolName}`).toBeDefined()
+            }
+        }
+    })
+
+    it('posthogSha is a 40-char hex string', () => {
+        const registry = build()
+        expect(registry.posthogSha).toMatch(/^[0-9a-f]{40}$/)
+    })
+
+    it('231 tools have HTTP specs; 31 are handwritten', () => {
+        const registry = build()
+        const withHttp = Object.values(registry.tools).filter(t => t.http !== null)
+        const handwritten = Object.values(registry.tools).filter(t => t.http === null)
+        expect(withHttp.length).toBe(231)
+        expect(handwritten.length).toBe(31)
+    })
+
+    it('output matches the checked-in registry.json', () => {
+        const registry = build()
+        const onDisk = JSON.parse(
+            readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/registry.json'), 'utf8')
+        ) as typeof registry
+        expect(Object.keys(registry.tools).sort()).toEqual(Object.keys(onDisk.tools).sort())
+        expect(Object.keys(registry.modules).sort()).toEqual(Object.keys(onDisk.modules).sort())
     })
 })

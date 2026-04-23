@@ -477,4 +477,5 @@ export {
     extractQueryParams,
     extractBodyParams,
     moduleSlug,
+    build,
 }
