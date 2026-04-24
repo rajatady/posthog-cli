@@ -275,6 +275,26 @@ describe('runTool – live execution', () => {
         expect(logged.some(l => typeof l === 'string' && l.includes('"count"'))).toBe(true)
     })
 
+    it('suppresses history id line on stderr when --json is set', async () => {
+        mockExecuteRequest.mockResolvedValueOnce({ status: 200, body: { count: 5 }, durationMs: 10 })
+        const errLogs: string[] = []
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation((...args) => { errLogs.push(String(args[0])) })
+        const cmd = makeCmd('feature-flag-get-all', httpTool)
+        await parse(cmd, ['feature-flag-get-all', '--why', 'test', '--json'])
+        expect(errLogs.every(l => !l.includes('history id'))).toBe(true)
+    })
+
+    it('prints history id line on stderr when --json is not set', async () => {
+        mockExecuteRequest.mockResolvedValueOnce({ status: 200, body: { count: 5 }, durationMs: 10 })
+        const errLogs: string[] = []
+        vi.spyOn(console, 'log').mockImplementation(() => {})
+        vi.spyOn(console, 'error').mockImplementation((...args) => { errLogs.push(String(args[0])) })
+        const cmd = makeCmd('feature-flag-get-all', httpTool)
+        await parse(cmd, ['feature-flag-get-all', '--why', 'test'])
+        expect(errLogs.some(l => l.includes('history id'))).toBe(true)
+    })
+
     it('warns on destructive tool and proceeds', async () => {
         mockExecuteRequest.mockResolvedValueOnce({ status: 200, body: {}, durationMs: 5 })
         const errLogs: string[] = []
@@ -768,7 +788,7 @@ describe('typeLabel – enum and array type', () => {
         expect(colorOpt?.description).toContain('one of: red, green, blue')
     })
 
-    it('renders "(any)" for props with no type or enum', () => {
+    it('renders a JSON hint for props with no type or enum', () => {
         const program = new Command()
         const tool: RegistryTool = {
             ...handwrittenTool,
@@ -776,7 +796,7 @@ describe('typeLabel – enum and array type', () => {
         }
         const cmd = registerToolCommand(program, { toolName: 'mystery-tool', tool })
         const opt = cmd.options.find((o) => o.long === '--mystery')
-        expect(opt?.description).toContain('(any)')
+        expect(opt?.description).toContain('JSON')
     })
 
     it('renders array type joined with |', () => {

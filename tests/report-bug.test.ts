@@ -141,6 +141,34 @@ describe('report-bug', () => {
         expect(body).not.toContain('99999')
     })
 
+    it('pre-fills what/expected/steps sections when flags are provided', async () => {
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
+
+        await runCmd([
+            'report-bug',
+            '--what', 'the command crashes',
+            '--expected', 'it should succeed',
+            '--steps', 'thehogcli query-run --query ...',
+        ])
+
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).toContain('the command crashes')
+        expect(body).toContain('it should succeed')
+        expect(body).toContain('thehogcli query-run --query ...')
+        expect(body).not.toContain('[FILL IN: describe the unexpected behaviour]')
+        expect(body).not.toContain('[FILL IN: what should have happened instead]')
+    })
+
+    it('uses [FILL IN] placeholders when what/expected/steps are omitted', async () => {
+        MockHistory.mockImplementation(() => ({ list: vi.fn().mockReturnValue([]), get: vi.fn() }))
+
+        await runCmd(['report-bug'])
+
+        const body = decodeURIComponent(extractUrl().split('body=')[1]!)
+        expect(body).toContain('[FILL IN: describe the unexpected behaviour]')
+        expect(body).toContain('[FILL IN: what should have happened instead]')
+    })
+
     it('uses --last N to fetch N history entries', async () => {
         const mockList = vi.fn().mockReturnValue([])
         MockHistory.mockImplementation(() => ({ list: mockList, get: vi.fn() }))

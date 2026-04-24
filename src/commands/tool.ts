@@ -191,7 +191,9 @@ async function runTool(
             forkedFrom: (rawOpts.forkedFrom as string | undefined) ?? null,
         })
         const short = id.slice(0, 8)
-        console.error(kleur.dim(`→ history id ${short}  (${exitCode === 0 ? 'ok' : `exit ${exitCode}`})`))
+        if (!rawOpts.json) {
+            console.error(kleur.dim(`→ history id ${short}  (${exitCode === 0 ? 'ok' : `exit ${exitCode}`})`))
+        }
     /* v8 ignore next 3 */
     } catch (err) {
         console.error(kleur.yellow(`(history write failed: ${(err as Error).message})`))
@@ -358,10 +360,11 @@ function toSnake(kebab: string): string {
     return kebab.replace(/-/g, '_')
 }
 
-function typeLabel(meta: { type?: string | string[]; enum?: unknown[] }): string {
+function typeLabel(meta: { type?: string | string[]; enum?: unknown[]; properties?: unknown }): string {
     if (meta.enum && meta.enum.length > 0) return `one of: ${meta.enum.join(', ')}`
     const t = Array.isArray(meta.type) ? meta.type.join('|') : meta.type
-    return t ? `(${t})` : '(any)'
+    if (t === 'object' || meta.properties) return 'JSON object'
+    return t ? `(${t})` : 'JSON value — pass as a string, number, or JSON object/array'
 }
 
 function printHandwrittenResult(status: number, body: unknown): void {

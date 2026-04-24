@@ -1,6 +1,6 @@
 {
   "name": "thehogcli",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A PostHog CLI that mirrors the PostHog MCP tool surface without the ~250k-token schema overhead. OAuth login with scopes derived from the registry. Every call is captured locally in .thehogcli/history.db with a required --why annotation and re-runnable by id.",
   "keywords": [
     "posthog",

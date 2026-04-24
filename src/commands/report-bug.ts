@@ -20,18 +20,21 @@ export function registerReportBugCommand(parent: Command): Command {
         .description(
             'Open a pre-filled GitHub issue with sanitised CLI context (no params, no response data).'
         )
+        .option('--title <text>', 'Issue title.')
+        .option('--what <text>', 'What happened (unexpected behaviour).')
+        .option('--expected <text>', 'What should have happened instead.')
+        .option('--steps <text>', 'Steps / exact command(s) to reproduce.')
         .option('--id <prefix>', 'Attach a specific history entry (prefix or full UUID).')
         .option('--last <n>', 'Attach the last N history entries (default: 5).', '5')
-        .option('--title <text>', 'Issue title (pre-fills the GitHub form).')
 
-    cmd.action((rawOpts: { id?: string; last?: string; title?: string }) => {
+    cmd.action((rawOpts: { id?: string; last?: string; title?: string; what?: string; expected?: string; steps?: string }) => {
         reportBug(rawOpts)
     })
 
     return cmd
 }
 
-function reportBug(opts: { id?: string; last?: string; title?: string }): void {
+function reportBug(opts: { id?: string; last?: string; title?: string; what?: string; expected?: string; steps?: string }): void {
     const cfg = loadConfig()
 
     let historyLines: string[] = []
@@ -65,6 +68,9 @@ function reportBug(opts: { id?: string; last?: string; title?: string }): void {
         nodeVersion: process.version,
         host: cfg.host,
         historyLines,
+        what: opts.what,
+        expected: opts.expected,
+        steps: opts.steps,
     })
 
     const url = `${GITHUB_ISSUES_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
@@ -84,9 +90,18 @@ interface BodyContext {
     nodeVersion: string
     host: string
     historyLines: string[]
+    what?: string
+    expected?: string
+    steps?: string
 }
 
 function buildBody(ctx: BodyContext): string {
+    const whatText = ctx.what ?? '[FILL IN: describe the unexpected behaviour]'
+    const expectedText = ctx.expected ?? '[FILL IN: what should have happened instead]'
+    const stepsText = ctx.steps
+        ? `\`\`\`bash\n${ctx.steps}\n\`\`\``
+        : `[FILL IN: exact command(s) to reproduce — do not paste API keys or query data]\n\n\`\`\`bash\nthehogcli [FILL IN command]\n\`\`\``
+
     return `<!-- ⚠️ STOP — before submitting, check this form for sensitive data.
      Remove any API keys, personal information, query contents, or response
      payloads that may have been added manually. params and response data
@@ -103,19 +118,15 @@ function buildBody(ctx: BodyContext): string {
 
 ## What happened?
 
-[FILL IN: describe the unexpected behaviour]
+${whatText}
 
 ## Expected behaviour
 
-[FILL IN: what should have happened instead]
+${expectedText}
 
 ## Steps to reproduce
 
-[FILL IN: exact command(s) to reproduce — do not paste API keys or query data]
-
-\`\`\`bash
-thehogcli [FILL IN command]
-\`\`\`
+${stepsText}
 
 ## CLI history (tool names, exit codes, timings — no params or response data)
 
